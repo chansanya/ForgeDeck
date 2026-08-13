@@ -1,0 +1,3 @@
+# Light DevOps Node.js 工作区仅包含 Vue 管理控制台。
+packages:
+  - frontend

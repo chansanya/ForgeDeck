@@ -1,0 +1,64 @@
+# Light DevOps 后端依赖、构建元数据及 Ruff、Pyright、Pytest 配置。
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "light-devops"
+version = "0.1.0"
+description = "Lightweight self-hosted DevOps control plane"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "aiosqlite>=0.21.0",
+  "alembic>=1.14.0",
+  "anyio>=4.8.0",
+  "argon2-cffi>=23.1.0",
+  "cryptography>=44.0.0",
+  "fastapi>=0.115.0",
+  "greenlet>=3.1.0",
+  "httpx>=0.28.0",
+  "mcp>=1.29.0,<2.0",
+  "orjson>=3.10.0",
+  "pydantic-settings>=2.7.0",
+  "PyJWT>=2.10.0",
+  "python-multipart>=0.0.20",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "structlog>=24.4.0",
+  "uvicorn[standard]>=0.34.0",
+  "websockets>=14.1",
+]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.30.0"]
+runner = [
+  "asyncssh>=2.19.0",
+  "docker>=7.1.0",
+]
+dev = [
+  "asgi-lifespan>=2.1.0",
+  "pyright>=1.1.403",
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.25.0",
+  "pytest-cov>=6.0.0",
+  "ruff>=0.9.0",
+]
+
+[project.scripts]
+devops-api = "devops.main:run_api"
+devops-runner = "devops.runner.main:run_runner"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devops"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+ignore = ["B008"]

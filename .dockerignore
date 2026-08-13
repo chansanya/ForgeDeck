@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.uv-cache
+.corepack
+node_modules
+testtmp-*
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.venv*
+**/coverage
+frontend/node_modules
+frontend/dist
+backend/data
+backend/logs
+backend/workspaces

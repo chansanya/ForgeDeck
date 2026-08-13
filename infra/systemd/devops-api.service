@@ -1,0 +1,24 @@
+# 以无 Docker 权限的独立用户运行 FastAPI 控制面，并在启动前迁移数据库。
+[Unit]
+Description=Light DevOps API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devops-api
+Group=light-devops
+WorkingDirectory=/opt/light-devops/backend
+EnvironmentFile=/etc/light-devops/devops.env
+UMask=0007
+ExecStartPre=/opt/light-devops/backend/.venv/bin/alembic upgrade head
+ExecStart=/opt/light-devops/backend/.venv/bin/uvicorn devops.api.main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/light-devops /var/log/light-devops
+
+[Install]
+WantedBy=multi-user.target

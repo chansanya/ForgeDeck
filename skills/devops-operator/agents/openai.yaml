@@ -1,0 +1,15 @@
+interface:
+  display_name: "DevOps Operator"
+  short_description: "Request approved builds, deployments, rollbacks, and scripts"
+  default_prompt: "Use $devops-operator to prepare a safe DevOps operation request for approval."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "devops"
+      description: "Self-hosted DevOps read-only and operation-request tools"
+      transport: "streamable_http"
+      url: "https://devops.local/mcp"
+
+policy:
+  allow_implicit_invocation: false

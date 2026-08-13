@@ -1,0 +1,70 @@
+# Light DevOps 生产编排：API 不挂 Docker Socket，只有内网 Runner 承担高权限操作。
+name: light-devops
+
+services:
+  volume-init:
+    image: busybox:1.37
+    command:
+      - sh
+      - -c
+      - chown -R 10001:10001 /data /logs /secrets && chmod 2770 /data /logs && chmod 0700 /secrets
+    network_mode: none
+    restart: "no"
+    volumes:
+      - devops-data:/data
+      - devops-logs:/logs
+      - devops-secrets:/secrets
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      DEVOPS_RUNNER_INTERNAL_URL: http://runner:8765
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    ports:
+      - "${DEVOPS_HTTP_PORT:-8000}:8000"
+    volumes:
+      - devops-data:/var/lib/devops
+      - devops-logs:/var/log/devops
+      - devops-secrets:/run/secrets/devops
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  runner:
+    build:
+      context: .
+      dockerfile: infra/docker/runner.Dockerfile
+    env_file:
+      - .env
+    environment:
+      DEVOPS_INTERNAL_HOST: 0.0.0.0
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - devops-data:/var/lib/devops
+      - devops-logs:/var/log/devops
+      - devops-workspaces:/var/lib/devops/workspaces
+      - devops-secrets:/run/secrets/devops:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DEVOPS_SSH_DIR:-./data/ssh}:/var/lib/devops/ssh
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  devops-data:
+  devops-logs:
+  devops-secrets:
+  devops-workspaces:

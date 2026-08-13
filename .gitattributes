@@ -1,0 +1,18 @@
+# 默认将文本文件规范化为 LF，避免 Windows 与 Linux 间产生整仓换行噪声。
+* text=auto eol=lf
+
+# 二进制资源不得参与换行转换。
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+
+# Windows 本地脚本保留 CRLF，Shell 与容器文件强制使用 LF。
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf

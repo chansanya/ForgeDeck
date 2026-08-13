@@ -1,0 +1,9 @@
+# 单应用 Compose 部署模板；流水线会把镜像替换为固化 digest 的引用。
+services:
+  app:
+    image: ${APP_IMAGE:-invalid.invalid/light-devops/app:unresolved}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8080}:${CONTAINER_PORT:-8080}"

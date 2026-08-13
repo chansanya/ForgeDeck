@@ -1,0 +1,8 @@
+{
+  "id": "python",
+  "name": "Python / ASGI",
+  "language": "python",
+  "dockerfile": "Dockerfile",
+  "default_port": 8000,
+  "health_path": "/health"
+}

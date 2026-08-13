@@ -1,0 +1,11 @@
+{
+  "description": "Light DevOps Node.js 工作区根配置",
+  "name": "light-devops",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": "10.14.0"
+  }
+}

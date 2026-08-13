@@ -1,0 +1,8 @@
+{
+  "id": "java-gradle",
+  "name": "Java / Gradle",
+  "language": "java",
+  "dockerfile": "Dockerfile",
+  "default_port": 8080,
+  "health_path": "/actuator/health"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "java-maven",
+  "name": "Java / Maven",
+  "language": "java",
+  "dockerfile": "Dockerfile",
+  "default_port": 8080,
+  "health_path": "/actuator/health"
+}

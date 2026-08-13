@@ -1,0 +1,41 @@
+{
+  "description": "Light DevOps Vue 3 管理控制台",
+  "name": "devops-console-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build",
+    "format": "prettier --write \"src/**/*.vue\" \"src/**/*.css\"",
+    "format:check": "prettier --check \"src/**/*.vue\" \"src/**/*.css\"",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "echarts": "^5.6.0",
+    "lucide-vue-next": "^0.468.0",
+    "naive-ui": "^2.40.4",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.4",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/tsconfig": "^0.7.0",
+    "prettier": "^3.9.6",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.4",
+    "vue-tsc": "^2.2.0"
+  }
+}

@@ -1,0 +1,229 @@
+# 持续验证后端、前端、迁移、发布配置、Skills 与生产镜像构建。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: devops
+          POSTGRES_PASSWORD: devops
+          POSTGRES_DB: devops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U devops"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-extras --dev --frozen
+        working-directory: backend
+      - run: uv run ruff check .
+        working-directory: backend
+      - name: Validate core file headers
+        run: uv run --frozen --no-sync python ../scripts/check_file_headers.py
+        working-directory: backend
+      - run: uv run pyright
+        working-directory: backend
+      - run: uv run alembic upgrade head
+        working-directory: backend
+        env:
+          DEVOPS_DATABASE_URL: sqlite+aiosqlite:///./ci-migrations.db
+      - run: uv run alembic upgrade head
+        working-directory: backend
+        env:
+          DEVOPS_DATABASE_URL: postgresql+asyncpg://devops:devops@127.0.0.1:5432/devops
+      - run: uv run pytest
+        working-directory: backend
+        env:
+          DEVOPS_POSTGRES_TEST_URL: postgresql+asyncpg://devops:devops@127.0.0.1:5432/devops
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --filter devops-console-web
+      - run: pnpm --filter devops-console-web format:check
+      - run: pnpm --filter devops-console-web typecheck
+      - run: pnpm --filter devops-console-web test
+      - run: pnpm --filter devops-console-web build
+
+  release:
+    name: release checks
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-extras --dev --frozen
+        working-directory: backend
+      - name: Validate systemd installer syntax
+        run: bash -n infra/systemd/install.sh
+      - name: Validate Skill layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          for skill_name in devops-observer devops-operator; do
+            skill_dir="skills/${skill_name}"
+            test -s "${skill_dir}/SKILL.md"
+            test -s "${skill_dir}/agents/openai.yaml"
+          done
+      - name: Validate Skills with official-equivalent rules
+        shell: bash
+        run: |
+          uv run --project backend --frozen --no-sync python - <<'PY'
+          import re
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          import yaml
+          from yaml.nodes import MappingNode, ScalarNode, SequenceNode
+
+          allowed_frontmatter = {"name", "description", "license", "allowed-tools", "metadata"}
+          string_tag = "tag:yaml.org,2002:str"
+
+
+          def fail(skill: str, message: str) -> None:
+              raise SystemExit(f"{skill}: {message}")
+
+
+          def require_quoted_values(skill: str, node: object, path: str = "openai.yaml") -> None:
+              if isinstance(node, MappingNode):
+                  for key_node, value_node in node.value:
+                      child_path = f"{path}.{key_node.value}"
+                      if isinstance(value_node, ScalarNode):
+                          if value_node.tag == string_tag and value_node.style not in {'"', "'"}:
+                              fail(skill, f"string value must be quoted: {child_path}")
+                      else:
+                          require_quoted_values(skill, value_node, child_path)
+              elif isinstance(node, SequenceNode):
+                  for index, value_node in enumerate(node.value):
+                      child_path = f"{path}[{index}]"
+                      if isinstance(value_node, ScalarNode):
+                          if value_node.tag == string_tag and value_node.style not in {'"', "'"}:
+                              fail(skill, f"string value must be quoted: {child_path}")
+                      else:
+                          require_quoted_values(skill, value_node, child_path)
+
+
+          for skill_dir in sorted(Path("skills").iterdir()):
+              if not skill_dir.is_dir():
+                  continue
+              skill = skill_dir.name
+              skill_md = skill_dir / "SKILL.md"
+              metadata_path = skill_dir / "agents" / "openai.yaml"
+              if not skill_md.is_file() or not metadata_path.is_file():
+                  fail(skill, "SKILL.md or agents/openai.yaml is missing")
+
+              content = skill_md.read_text(encoding="utf-8")
+              if not content.startswith("---"):
+                  fail(skill, "No YAML frontmatter found")
+              match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+              if not match:
+                  fail(skill, "Invalid frontmatter format")
+              frontmatter = yaml.safe_load(match.group(1))
+              if not isinstance(frontmatter, dict):
+                  fail(skill, "Frontmatter must be a YAML dictionary")
+              unexpected = set(frontmatter) - allowed_frontmatter
+              if unexpected:
+                  fail(skill, f"Unexpected frontmatter keys: {sorted(unexpected)}")
+              if "name" not in frontmatter or "description" not in frontmatter:
+                  fail(skill, "Frontmatter requires name and description")
+
+              name = frontmatter["name"]
+              description = frontmatter["description"]
+              if not isinstance(name, str):
+                  fail(skill, "Name must be a string")
+              name = name.strip()
+              if name != skill:
+                  fail(skill, "Skill folder must match frontmatter name")
+              if not re.fullmatch(r"[a-z0-9-]+", name):
+                  fail(skill, "Name must use lowercase hyphen-case")
+              if name.startswith("-") or name.endswith("-") or "--" in name or len(name) > 64:
+                  fail(skill, "Name has invalid hyphen placement or exceeds 64 characters")
+              if not isinstance(description, str):
+                  fail(skill, "Description must be a string")
+              description = description.strip()
+              if "<" in description or ">" in description or len(description) > 1024:
+                  fail(skill, "Description contains angle brackets or exceeds 1024 characters")
+
+              metadata_text = metadata_path.read_text(encoding="utf-8")
+              metadata_node = yaml.compose(metadata_text)
+              if metadata_node is None:
+                  fail(skill, "agents/openai.yaml is empty")
+              require_quoted_values(skill, metadata_node)
+              metadata = yaml.safe_load(metadata_text)
+              if not isinstance(metadata, dict):
+                  fail(skill, "agents/openai.yaml must be a mapping")
+              interface = metadata.get("interface")
+              if not isinstance(interface, dict):
+                  fail(skill, "interface must be a mapping")
+              for field in ("display_name", "short_description", "default_prompt"):
+                  if not isinstance(interface.get(field), str) or not interface[field].strip():
+                      fail(skill, f"interface.{field} must be a non-empty string")
+              if not 25 <= len(interface["short_description"]) <= 64:
+                  fail(skill, "interface.short_description must contain 25-64 characters")
+              if f"${name}" not in interface["default_prompt"]:
+                  fail(skill, "interface.default_prompt must explicitly mention the Skill")
+
+              dependencies = metadata.get("dependencies")
+              tools = dependencies.get("tools") if isinstance(dependencies, dict) else None
+              if not isinstance(tools, list) or not tools:
+                  fail(skill, "dependencies.tools must be a non-empty list")
+              mcp_tools = [tool for tool in tools if isinstance(tool, dict) and tool.get("type") == "mcp"]
+              if not mcp_tools:
+                  fail(skill, "an MCP dependency is required")
+              for tool in mcp_tools:
+                  if tool.get("transport") != "streamable_http":
+                      fail(skill, "MCP transport must be streamable_http")
+                  url = tool.get("url")
+                  if not isinstance(url, str):
+                      fail(skill, "MCP URL must be a string")
+                  parsed = urlparse(url)
+                  if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                      fail(skill, "MCP URL must be an absolute HTTP(S) URL")
+                  if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+                      fail(skill, "MCP URL must be reachable by a separate client")
+                  if parsed.path.rstrip("/") != "/mcp":
+                      fail(skill, "MCP URL path must be /mcp")
+
+              policy = metadata.get("policy")
+              if not isinstance(policy, dict) or not isinstance(policy.get("allow_implicit_invocation"), bool):
+                  fail(skill, "policy.allow_implicit_invocation must be a boolean")
+              print(f"{skill}: Skill is valid")
+          PY
+      - name: Validate Docker Compose configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci_env_file=".env"
+          trap 'rm -f -- "$ci_env_file"' EXIT
+          install -m 600 .env.example "$ci_env_file"
+          docker compose --env-file "$ci_env_file" config --quiet
+      - name: Build release Docker images
+        run: |
+          docker build --file infra/docker/api.Dockerfile --tag light-devops-api:ci .
+          docker build --file infra/docker/runner.Dockerfile --tag light-devops-runner:ci .

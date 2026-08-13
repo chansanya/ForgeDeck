@@ -1,0 +1,8 @@
+{
+  "id": "node",
+  "name": "Node.js",
+  "language": "node",
+  "dockerfile": "Dockerfile",
+  "default_port": 3000,
+  "health_path": "/health"
+}
