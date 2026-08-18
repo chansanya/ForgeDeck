@@ -82,74 +82,86 @@ Webhook 验签与去重
 - TCP 健康检查需要兼容 `nc -z -w` 的 Netcat，例如 `netcat-openbsd`
 - Compose healthcheck 和受控命令检查不依赖 `curl` 或 Netcat
 
-## 本地开发
+## 新机器本地开发
 
-以下命令均从仓库根目录执行。本地后端使用 `backend/.env`，根目录 `.env` 只供 Docker Compose 使用，两者不能混用。
+以下步骤均从仓库根目录执行。新机器需要先安装 Git、Python 3.13、uv 0.11.16+、Node.js 24 LTS 和 Docker Engine；Docker/Buildx/Compose 用于真实构建和部署，单元测试不依赖本机 Docker。后端配置使用 `backend/.env`，根目录 `.env` 只供 Docker Compose 生产部署，二者不能混用。
 
-### Node.js 与 fnm 自动切换
+### 1. 后端：API、Runner 和 SQLite
 
-仓库根目录的 `.node-version` 将 Node.js 固定为 `24.19.0`。fnm 只有在 Shell 初始化时启用 `--use-on-cd`，进入仓库目录后才会自动切换版本。
-
-Bash：
+先克隆仓库并进入目录：
 
 ```bash
-eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"
+git clone https://github.com/chansanya/ForgeDeck.git
+cd ForgeDeck
 ```
 
-Zsh：
-
-```zsh
-eval "$(fnm env --use-on-cd --corepack-enabled --shell zsh)"
-```
-
-Windows PowerShell：
-
-```powershell
-fnm env --use-on-cd --corepack-enabled --shell powershell | Out-String | Invoke-Expression
-```
-
-将对应命令写入 Shell 配置文件后重新打开终端。首次进入仓库时如果该版本尚未安装，执行：
+安装 Python 依赖并创建本地配置：
 
 ```bash
-fnm use --install-if-missing
-corepack enable
+uv python install 3.13
+cp backend/.env.example backend/.env
+uv --directory backend sync --python 3.13 --all-extras --dev --frozen
 ```
 
-Corepack 会继续读取根 `package.json` 的 `packageManager` 字段，使用项目指定的 pnpm 10.14.0。
-
-### 1. 后端
-
-安装 Python 3.13 并创建冻结依赖环境：
-
-```bash
-uv python install 3.13                          # 安装 Python 3.13 解释器
-cp backend/.env.example backend/.env            # 从模板创建本地配置，按需修改密码和 Token
-uv --directory backend sync --python 3.13 --all-extras --dev --frozen  # 按 uv.lock 安装全部依赖
-uv --directory backend run alembic upgrade head  # 执行数据库迁移到最新版本
-uv --directory backend run python -m devops.cli init-admin  # 创建初始管理员账号
-```
-
-Windows PowerShell 复制配置文件：
+Windows PowerShell 使用：
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
 ```
 
-修改 `backend/.env`，确保 API 与 Runner 使用相同且至少 32 字符的 `DEVOPS_INTERNAL_TOKEN`。分别启动两个进程：
+编辑 `backend/.env`，至少替换以下两个占位值：
+
+- `DEVOPS_ADMIN_INITIAL_PASSWORD`：首次登录密码，至少 12 个字符。
+- `DEVOPS_INTERNAL_TOKEN`：API 与 Runner 共用的随机 Token，至少 32 个字符。
+
+然后执行数据库迁移并创建管理员：
 
 ```bash
-uv --directory backend run uvicorn devops.api.main:app --host 0.0.0.0 --port 8000 --reload  # 启动 API，开发模式热重载
+uv --directory backend run alembic upgrade head
+uv --directory backend run python -m devops.cli init-admin
+```
+
+分别打开两个终端启动 API 和 Runner：
+
+```bash
+# 终端一：API，开发模式支持热重载
+uv --directory backend run uvicorn devops.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ```bash
-uv --directory backend run python -m devops.runner.main  # 启动 Runner，轮询任务队列
+# 终端二：Runner，执行构建、部署、SSH 和指标采集任务
+uv --directory backend run python -m devops.runner.main
 ```
 
-### 2. 前端
+确认后端正常：
 
 ```bash
-corepack pnpm install --frozen-lockfile --filter devops-console-web  # 按锁文件安装前端依赖
-corepack pnpm --filter devops-console-web dev                       # 启动 Vite 开发服务器（端口 5173）
+curl http://127.0.0.1:8000/health
+```
+
+### 2. 前端：Node.js、Corepack 和 Vite
+
+确认 Node.js 主版本为 24，并启用 Corepack：
+
+```bash
+node --version
+corepack enable
+corepack pnpm --version
+```
+
+`corepack pnpm --version` 应输出 `10.14.0`。如果前端 API 不在本机，复制 `frontend/.env.example` 为 `frontend/.env`，把 `VITE_DEV_API_TARGET` 改成 API 地址；本机开发可直接使用默认值。
+
+安装依赖并启动 Vite：
+
+```bash
+corepack pnpm install --frozen-lockfile --filter devops-console-web
+corepack pnpm --filter devops-console-web dev
+```
+
+生产构建：
+
+```bash
+corepack pnpm --filter devops-console-web build
 ```
 
 本地访问入口：

@@ -42,7 +42,7 @@ devops/
 ├── AGENTS.md               Agent 与开发者代码规范
 ├── docker-compose.yml      Compose 部署入口
 ├── .env.example            Compose 生产配置模板
-├── .node-version           fnm 自动切换使用的精确 Node.js 版本
+├── .node-version           Node.js 版本约束文件
 ├── package.json            pnpm 工作区根元数据
 ├── pnpm-workspace.yaml     前端工作区声明
 ├── pnpm-lock.yaml          Node.js 冻结依赖
