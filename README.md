@@ -86,6 +86,37 @@ Webhook 验签与去重
 
 以下命令均从仓库根目录执行。本地后端使用 `backend/.env`，根目录 `.env` 只供 Docker Compose 使用，两者不能混用。
 
+### Node.js 与 fnm 自动切换
+
+仓库根目录的 `.node-version` 将 Node.js 固定为 `24.19.0`。fnm 只有在 Shell 初始化时启用 `--use-on-cd`，进入仓库目录后才会自动切换版本。
+
+Bash：
+
+```bash
+eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"
+```
+
+Zsh：
+
+```zsh
+eval "$(fnm env --use-on-cd --corepack-enabled --shell zsh)"
+```
+
+Windows PowerShell：
+
+```powershell
+fnm env --use-on-cd --corepack-enabled --shell powershell | Out-String | Invoke-Expression
+```
+
+将对应命令写入 Shell 配置文件后重新打开终端。首次进入仓库时如果该版本尚未安装，执行：
+
+```bash
+fnm use --install-if-missing
+corepack enable
+```
+
+Corepack 会继续读取根 `package.json` 的 `packageManager` 字段，使用项目指定的 pnpm 10.14.0。
+
 ### 1. 后端
 
 安装 Python 3.13 并创建冻结依赖环境：
